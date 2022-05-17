@@ -1,0 +1,73 @@
+import csv
+from numpy import result_type
+import requests 
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+def get_url(search_term):
+    template = 'https://www.amazon.com/s?k={}'
+    search_term = search_term.replace(' ','+')
+    
+    url = template.format(search_term)
+    
+    url += '&page={}'
+    
+    return url
+
+def extract_record(item):
+    atag = item.h2.a
+    description = atag.text.strip()
+    url = 'https://www.amazon.com' + atag.get('href')
+    try : 
+        price_parent = item.find('span', {'class':'a-price'})
+        price = price_parent.find('span',{'class':'a-offscreen'}).text 
+
+    except AttributeError: 
+        return 
+
+    try:
+        rating = item.i.text
+        review_cnt = item.find('span',{'class' : 'a-size-base'}).text
+        
+    except AttributeError:
+        rating = ''
+        review_cnt = ''
+
+    result = (description, price, rating, review_cnt, url)
+
+    return result
+
+def main(search_term):
+    """Run main program routine """
+    # startup the webdriver
+    
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+    url = "https://www.amazon.com"
+    driver.get(url)
+    
+    records = []
+    url = get_url(search_term)
+    
+    for page in range(1,21):
+        driver.get(url.format(page))
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        results = soup.find_all('div', {'data-component-type' : 's-search-result'})
+        
+        for item in results:
+            record = extract_record(item)
+            if record:
+                records.append(record)
+    driver.close()
+    
+    # save data to csv file
+    
+    with open('results.csv', 'w', newline='', encoding = 'utf-8') as f :
+        writer = csv.writer(f)
+        writer.writerow(['Description','Price','Rating','ReviewCount','Url'])
+        writer.writerows(records)
+        
+        
+        
