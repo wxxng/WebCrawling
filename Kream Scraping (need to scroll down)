@@ -1,0 +1,86 @@
+import csv
+from numpy import result_type
+import requests 
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+
+def get_url(search_term):
+    template = 'https://kream.co.kr/search?keyword={}'
+    search_term = search_term.replace(' ','%20')
+    
+    url = template.format(search_term)
+
+    return url
+
+def extract_record(item):
+    atag = item.find('a')
+    url = 'https://kream.co.kr' + atag.get('href')
+    try : 
+        price_parent = item.find('div', {'class':'price'})
+        price = price_parent.find('div',{'class':'amount'}).text 
+
+    except AttributeError: 
+        return 
+
+    try:
+        brand = item.find('p', {'class':'brand'}).text
+        name = item.find('p', {'class':'name'}).text
+    except AttributeError:
+        return 
+    
+    try:
+        wish = item.find('span',{'class' : 'wish_figure'})
+        wish_cnt = wish.find('span',{'class' : 'text'}).text
+        review = item.find('span',{'class' : 'review_figure'})
+        review_cnt = review.find('span',{'class' : 'text'}).text
+    except AttributeError :
+        wish_cnt = ''
+        review_cnt = ''
+
+    result = (brand, name, price, wish_cnt, review_cnt, url)
+
+    return result
+
+def main(search_term):
+    
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+    url = "https://kream.co.kr"
+    driver.get(url)
+    
+    records = []
+    url = get_url(search_term)
+    driver.get(url)
+    
+    while True:
+    #아래로 스크롤을 내린다. 
+        driver.find_element_by_tag_name('body').send_keys(Keys.PAGE_DOWN)
+
+    #스크롤 사이 페이지 로딩 시간 
+        time.sleep(1)
+
+    #스크롤 후 높이 
+        after_h = driver.execute_script("return window.scrollY")
+
+        if after_h > 30000 :
+            break
+        
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    
+    results = soup.find_all('div', {'class':'search_result_item'})
+    for item in results :
+        record = extract_record(item)
+        if record:
+            records.append(record)
+    driver.close() 
+    
+    with open('results_Kream.csv', 'w', newline='', encoding = 'utf-8') as f :
+        writer = csv.writer(f)
+        writer.writerow(['Brand','Name','Price','Wish_cnt','Review_cnt', 'Url'])
+        writer.writerows(records)
+        
+        
